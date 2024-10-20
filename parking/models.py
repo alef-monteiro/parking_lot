@@ -1,4 +1,4 @@
-from datetime import timezone
+from django.utils import timezone
 
 from django.db import models
 
@@ -95,10 +95,6 @@ class ParkingSpot(ModelBase):
         null=False,
         on_delete=models.CASCADE,
     )
-    def duration(self):
-        if self.updated_at is not None:
-            return self.updated_at - self.created_at
-        return timezone.now() - self.created_at
 
 
 class Transaction(ModelBase):
@@ -120,16 +116,35 @@ class Transaction(ModelBase):
         null=False,
         on_delete=models.CASCADE
     )
-
-    #precisa de uma função que pegue o valor(price_hour) no parking_spot
-    # e multiplique pelo tempo de duração (duration)
+    check_in = models.DateTimeField(
+        db_column='check_in',
+        null=False,
+        auto_now_add=True,  # Inicio
+    )
+    check_out = models.DateTimeField(
+        db_column='check_out',
+        null=False,
+        auto_now=True,  # Fim
+    )
     total_value = models.FloatField(
         db_column='total_value',
         null=False,
         default=0.0,
     )
 
+    def duration(self):
+        if self.check_out is None:
+            return timezone.now() - self.check_in
+        return self.check_out - self.check_in
+
+    def calculate_total(self):
+        duration = self.duration()
+        hours = duration.total_seconds()
+        price_hour = self.id_parking_spot.price_hour
+        total = price_hour * hours
+        return total
+
     def save(self, *args, **kwargs):
-        """Override o método save para calcular o valor total automaticamente."""
-        self.total_value = self.id_parking_spot.calculate_total_value()
+        if self.check_out:
+            self.total_value = self.calculate_total()
         super().save(*args, **kwargs)
